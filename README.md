@@ -2,52 +2,66 @@
 
 A construction consulting agent that provides expert guidance based on 50+ real construction cases. Built for **cloud deployment** with a clean, minimal interface.
 
-## 🚀 Quick Start
+## 🚀 Quick Deployment to GitHub & Cloud
 
-### 1. Clone & Setup
+### Step 1: Push to GitHub
 ```bash
-git clone https://github.com/YOUR_USERNAME/construction-assistant
-cd construction-assistant
-pip install -r requirements.txt
+# Initialize git (if not already done)
+git init
+
+# Add all files
+git add .
+
+# Commit changes
+git commit -m "Construction consulting agent - ready for cloud"
+
+# Add your GitHub repository as remote (replace with your username)
+git remote add origin https://github.com/YOUR_USERNAME/construction-assistant
+
+# Push to GitHub
+git push -u origin main
 ```
 
-### 2. Test Locally (Optional)
+### Step 2: Deploy UI (FREE - Streamlit Cloud)
+1. Go to [share.streamlit.io](https://share.streamlit.io)
+2. Sign in with GitHub
+3. Click "Deploy an app"
+4. Select your repository: `YOUR_USERNAME/construction-assistant`
+5. Set main file path: `app/ui.py`
+6. Click "Deploy"
+
+Your app will be live at: `https://YOUR_USERNAME-construction-assistant.streamlit.app`
+
+### Step 3: Deploy Backend (Optional)
+The UI works offline with embedded case data. For advanced features, deploy the backend:
+
+**Option A: Railway (Recommended)**
+1. Go to [railway.app](https://railway.app)
+2. Connect GitHub repository
+3. Deploy from `Dockerfile`
+4. Set environment variable in Streamlit: `API_URL=https://your-app.railway.app/chat`
+
+**Option B: Render**
+1. Go to [render.com](https://render.com)
+2. Create new Web Service from GitHub
+3. Use Docker deployment
+4. Set environment variable in Streamlit
+
+**Option C: Heroku**
 ```bash
-streamlit run app/ui.py
+# Install Heroku CLI, then:
+heroku create your-construction-api
+git push heroku main
 ```
 
-### 3. Deploy to Cloud (FREE)
-1. Push to GitHub
-2. Deploy on [share.streamlit.io](https://share.streamlit.io)
-3. Share your public URL!
-
-## 📁 Project Structure
-```
-construction-assistant/
-├── app/
-│   ├── ui.py              # Streamlit interface
-│   ├── server.py          # API backend (optional)
-│   └── ingest.py          # Data processing
-├── data/
-│   └── cases.csv          # Construction cases dataset
-├── requirements.txt       # Dependencies
-└── README.md             # This file
-```
-
-## 🌐 Deployment
-
-**Streamlit Community Cloud (FREE)**:
-- Zero setup cost
-- Automatic HTTPS
-- Custom subdomain
-- Auto-deploys on git push
-
-See `CLOUD_READY.md` for detailed deployment instructions.
-
-## ✨ Features
+## ✅ What You Get
 
 - 🏗️ **50+ Real Cases**: Based on actual construction problems
-- 🔍 **Smart Search**: Find similar past cases
+- 🔍 **Smart Search**: Find similar past cases  
+- 📚 **Source Citations**: See which cases informed each answer
+- 🌐 **Cloud Ready**: Deploy anywhere with Docker
+- 📱 **Mobile Friendly**: Works on all devices
+- ⚡ **Offline Mode**: UI works without backend when deployed
 - 📱 **Mobile-Friendly**: Works on all devices
 - ⚡ **Fast**: Lightweight and optimized
 - 🆓 **Free**: Deploy at zero cost
