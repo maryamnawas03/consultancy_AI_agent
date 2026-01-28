@@ -131,7 +131,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # API configuration - use environment variable for cloud deployment
-API_URL = os.getenv("API_URL", "http://localhost:8000/chat")
+API_URL = os.getenv("API_URL", None)  # Default to None to use fallback search
 
 # Try to import fallback search for when API is not available
 try:
@@ -195,72 +195,82 @@ if (st.session_state.messages and
     if needs_response:
         last_user_msg = st.session_state.messages[-1]["content"]
         with st.spinner("🔍 Searching through 50 construction cases..."):
-            try:
-                payload = {
-                    "session_id": st.session_state.session_id,
-                    "message": last_user_msg,
-                    "top_k": 6
-                }
-                
-                response = requests.post(API_URL, json=payload, timeout=180)
-                response.raise_for_status()
-                result = response.json()
-                
-                answer = result["answer"]
-                sources = result.get("sources", [])
-                confidence = result.get("best_score", 0.0)
-                
-                # Add assistant response
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": answer,
-                    "sources": sources,
-                    "confidence": confidence
-                })
-                st.rerun()
-                
-            except requests.exceptions.ConnectionError:
-                # Try fallback search if available
+            # Check if API is available, otherwise use fallback
+            if API_URL and API_URL.startswith(('http://', 'https://')):
+                try:
+                    payload = {
+                        "session_id": st.session_state.session_id,
+                        "message": last_user_msg,
+                        "top_k": 6
+                    }
+                    
+                    response = requests.post(API_URL, json=payload, timeout=180)
+                    response.raise_for_status()
+                    result = response.json()
+                    
+                    answer = result["answer"]
+                    sources = result.get("sources", [])
+                    confidence = result.get("best_score", 0.0)
+                    
+                    # Add assistant response
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": answer,
+                        "sources": sources,
+                        "confidence": confidence
+                    })
+                    st.rerun()
+                    
+                except (requests.exceptions.ConnectionError, requests.exceptions.HTTPError, requests.exceptions.Timeout):
+                    # Fall back to offline search on any API error
+                    if FALLBACK_AVAILABLE:
+                        try:
+                            result = fallback_chat(last_user_msg)
+                            st.session_state.messages.append({
+                                "role": "assistant",
+                                "content": result["answer"] + "\n\n*Note: Using offline search since API is unavailable.*",
+                                "sources": result.get("sources", []),
+                                "confidence": result.get("best_score", 0.0)
+                            })
+                        except Exception as e:
+                            st.session_state.messages.append({
+                                "role": "assistant", 
+                                "content": f"❌ Both API and offline search failed. Error: {str(e)}"
+                            })
+                    else:
+                        st.session_state.messages.append({
+                            "role": "assistant", 
+                            "content": "❌ API unavailable and offline mode not enabled."
+                        })
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.session_state.messages.append({
+                        "role": "assistant", 
+                        "content": f"❌ Unexpected error: {str(e)}"
+                    })
+                    st.rerun()
+            else:
+                # No API configured, use fallback search directly
                 if FALLBACK_AVAILABLE:
                     try:
                         result = fallback_chat(last_user_msg)
                         st.session_state.messages.append({
                             "role": "assistant",
-                            "content": result["answer"] + "\n\n*Note: Using offline search since API is unavailable.*",
+                            "content": result["answer"],
                             "sources": result.get("sources", []),
                             "confidence": result.get("best_score", 0.0)
                         })
                     except Exception as e:
                         st.session_state.messages.append({
                             "role": "assistant", 
-                            "content": f"❌ Both API and offline search failed. Error: {str(e)}"
+                            "content": f"❌ Offline search failed. Error: {str(e)}"
                         })
                 else:
                     st.session_state.messages.append({
                         "role": "assistant", 
-                        "content": "❌ Connection failed. The backend API is currently unavailable and offline mode is not enabled."
+                        "content": "❌ No API configured and offline search not available."
                     })
-                st.rerun()
-                
-            except requests.exceptions.Timeout:
-                st.session_state.messages.append({
-                    "role": "assistant", 
-                    "content": "⏰ Request timed out. The server might be overloaded. Please try again."
-                })
-                st.rerun()
-                
-            except requests.exceptions.HTTPError as e:
-                st.session_state.messages.append({
-                    "role": "assistant", 
-                    "content": f"🔥 Server error: {str(e)}"
-                })
-                st.rerun()
-                
-            except Exception as e:
-                st.session_state.messages.append({
-                    "role": "assistant", 
-                    "content": f"❌ Unexpected error: {str(e)}"
-                })
                 st.rerun()
 
 # Sample questions (only show when no conversation)
@@ -313,8 +323,12 @@ if not st.session_state.messages:
 
 # Cloud deployment info
 st.sidebar.markdown("### 🌐 Deployment Info")
-st.sidebar.info(f"API Endpoint: {API_URL}")
-if API_URL.startswith("http://localhost"):
-    st.sidebar.warning("⚠️ Running in local mode")
+if API_URL and API_URL.startswith(('http://', 'https://')):
+    st.sidebar.info(f"API Endpoint: {API_URL}")
+    if API_URL.startswith("http://localhost"):
+        st.sidebar.warning("⚠️ Running in local mode")
+    else:
+        st.sidebar.success("☁️ Connected to cloud API")
 else:
-    st.sidebar.success("☁️ Connected to cloud API")
+    st.sidebar.success("🔍 Offline Search Mode")
+    st.sidebar.info("Using embedded case database")
