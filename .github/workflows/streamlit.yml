@@ -1,0 +1,9 @@
+# GitHub Actions Workflow for deploying to Streamlit Cloud
+# This file is automatically used by Streamlit Cloud when connected to GitHub
+
+# No additional configuration needed - Streamlit Cloud will:
+# 1. Detect this is a Streamlit app
+# 2. Install requirements.txt
+# 3. Run the app using: streamlit run app/ui.py
+
+# For manual deployment instructions, see README.md

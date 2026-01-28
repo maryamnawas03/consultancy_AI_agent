@@ -131,7 +131,15 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # API configuration - use environment variable for cloud deployment
-API_URL = os.getenv("API_URL", "https://your-backend-api.railway.app/chat")
+API_URL = os.getenv("API_URL", "http://localhost:8000/chat")
+
+# Try to import fallback search for when API is not available
+try:
+    from fallback_search import fallback_chat
+    FALLBACK_AVAILABLE = True
+except ImportError:
+    FALLBACK_AVAILABLE = False
+    fallback_chat = None
 
 # Initialize session state
 if "messages" not in st.session_state:
@@ -212,10 +220,26 @@ if (st.session_state.messages and
                 st.rerun()
                 
             except requests.exceptions.ConnectionError:
-                st.session_state.messages.append({
-                    "role": "assistant", 
-                    "content": "❌ Connection failed. The backend API is currently unavailable."
-                })
+                # Try fallback search if available
+                if FALLBACK_AVAILABLE:
+                    try:
+                        result = fallback_chat(last_user_msg)
+                        st.session_state.messages.append({
+                            "role": "assistant",
+                            "content": result["answer"] + "\n\n*Note: Using offline search since API is unavailable.*",
+                            "sources": result.get("sources", []),
+                            "confidence": result.get("best_score", 0.0)
+                        })
+                    except Exception as e:
+                        st.session_state.messages.append({
+                            "role": "assistant", 
+                            "content": f"❌ Both API and offline search failed. Error: {str(e)}"
+                        })
+                else:
+                    st.session_state.messages.append({
+                        "role": "assistant", 
+                        "content": "❌ Connection failed. The backend API is currently unavailable and offline mode is not enabled."
+                    })
                 st.rerun()
                 
             except requests.exceptions.Timeout:
