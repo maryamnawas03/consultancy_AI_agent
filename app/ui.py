@@ -172,15 +172,18 @@ for message in st.session_state.messages:
         </div>
         """, unsafe_allow_html=True)
     else:
-        st.markdown(f"""
+        # For assistant messages, render with proper formatting
+        st.markdown("""
         <div class="chat-message assistant-message">
-            <strong>Assistant:</strong><br>{message["content"]}
+            <strong>Assistant:</strong>
         </div>
         """, unsafe_allow_html=True)
+        # Use st.markdown to properly render markdown formatting
+        st.markdown(message["content"])
         
         # Show sources if available
         if "sources" in message and message["sources"]:
-            st.caption(f"📚 **Sources**: {', '.join(message['sources'])}")
+            st.caption(f"📚 Sources: {', '.join(message['sources'])}")
 
 # Process pending user message if it needs a response
 if (st.session_state.messages and 

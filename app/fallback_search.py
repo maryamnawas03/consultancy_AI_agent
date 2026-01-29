@@ -117,7 +117,7 @@ def extract_prevention(solution):
     return None
 
 def build_structured_response(query, results):
-    """Build simple direct response"""
+    """Build natural consultant-style response"""
     if not results:
         return "No matching cases found. Try describing the issue differently."
     
@@ -126,13 +126,61 @@ def build_structured_response(query, results):
         return "Low confidence match. Consider consulting a specialist."
     
     top = relevant[0]
+    solution = top['solution']
     
-    # Natural paragraph response
-    response = f"**{top['title']}**\n\n"
+    # Clean title (remove location tags for cleaner heading)
+    title = re.sub(r'\s*\([^)]+\)\s*$', '', top['title']).strip()
+    
+    # Parse solution into components
+    root_cause = ""
+    corrective = ""
+    prevention = ""
+    
+    # Extract root cause
+    cause_match = re.search(r'[Rr]oot cause:?\s*([^.]+\.)', solution)
+    if cause_match:
+        root_cause = cause_match.group(1).strip()
+    
+    # Extract corrective action
+    corr_match = re.search(r'[Cc]orrective:?\s*([^.]+\.)', solution)
+    if corr_match:
+        corrective = corr_match.group(1).strip()
+    
+    # Extract prevention
+    prev_match = re.search(r'[Pp]revent:?\s*([^.]+\.)', solution)
+    if prev_match:
+        prevention = prev_match.group(1).strip()
+    
+    # Build natural response
+    response = f"### {title}\n\n"
+    
+    # Context paragraph
     response += f"{top['problem']}\n\n"
-    response += f"{top['solution']}"
     
-    return response
+    # Root cause (if found)
+    if root_cause:
+        response += f"**Root Cause:** {root_cause}\n\n"
+    
+    # What to do
+    response += "**What to do:**\n\n"
+    
+    # Get action sentences (excluding root cause/prevent parts)
+    action_text = solution
+    action_text = re.sub(r'[Rr]oot cause:?\s*[^.]+\.', '', action_text)
+    action_text = re.sub(r'[Cc]orrective:?\s*[^.]+\.', '', action_text)
+    action_text = re.sub(r'[Pp]revent:?\s*[^.]+\.', '', action_text)
+    action_text = re.sub(r'\s+', ' ', action_text).strip()
+    
+    if corrective:
+        response += f"{corrective}\n\n"
+    if action_text:
+        response += f"{action_text}\n\n"
+    
+    # Prevention
+    if prevention:
+        response += f"**Prevention:** {prevention}\n"
+    
+    return response.strip()
 
 def fallback_chat(query, top_k=5):
     """Main search function with structured output"""
