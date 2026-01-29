@@ -1,10 +1,18 @@
 """
-Field-ready construction assistant with structured responses
-Decision + Checks + Actions format
+Construction assistant with Gemini AI integration
+Uses LLM to generate responses based on similar cases
 """
 import pandas as pd
 import re
 import os
+import google.generativeai as genai
+
+# Configure Gemini API
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyAEkUc4dKSmWEj67I1vMLqZWY4peUQaAks")
+genai.configure(api_key=GEMINI_API_KEY)
+
+# Initialize Gemini model (using gemini-1.5-flash for free tier availability)
+model = genai.GenerativeModel('models/gemini-1.5-flash')
 
 # Trade detection keywords
 TRADE_KEYWORDS = {
@@ -64,60 +72,8 @@ def simple_search(query, top_k=5):
     scores.sort(key=lambda x: x['score'], reverse=True)
     return scores[:top_k]
 
-def extract_causes(results):
-    """Extract root causes from solution texts"""
-    causes = []
-    for r in results:
-        solution = r['solution'].lower()
-        patterns = [
-            r'root cause[s]?:?\s*([^.]+)',
-            r'cause[d]? by:?\s*([^.]+)',
-        ]
-        for pattern in patterns:
-            matches = re.findall(pattern, solution)
-            for m in matches:
-                if m.strip() and len(m) > 10:
-                    causes.append(m.strip().capitalize())
-    return list(dict.fromkeys(causes))[:3]  # unique, max 3
-
-def extract_checks(solution):
-    """Extract check items from solution"""
-    checks = []
-    keywords = ['check', 'verify', 'inspect', 'confirm', 'measure', 'test']
-    sentences = solution.split('.')
-    for s in sentences:
-        if any(kw in s.lower() for kw in keywords):
-            clean = s.strip()
-            if clean and len(clean) > 15:
-                checks.append(clean)
-    return checks[:4]
-
-def extract_fixes(solution):
-    """Extract corrective actions"""
-    fixes = []
-    # Look for corrective section
-    match = re.search(r'corrective:?\s*([^.]+\.?[^.]*\.?)', solution.lower())
-    if match:
-        fixes.append(match.group(1).strip().capitalize())
-    else:
-        # Extract action-oriented sentences
-        action_words = ['replace', 'repair', 'adjust', 'seal', 'clean', 'install', 'remove', 'set']
-        for s in solution.split('.'):
-            if any(w in s.lower() for w in action_words):
-                clean = s.strip()
-                if clean and len(clean) > 10:
-                    fixes.append(clean)
-    return fixes[:4]
-
-def extract_prevention(solution):
-    """Extract prevention tips"""
-    match = re.search(r'prevent[ion]?:?\s*([^.]+)', solution.lower())
-    if match:
-        return match.group(1).strip().capitalize()
-    return None
-
-def build_structured_response(query, results):
-    """Build natural consultant-style response"""
+def build_gemini_response(query, results):
+    """Use Gemini AI to generate response based on similar cases"""
     if not results:
         return "No matching cases found. Try describing the issue differently."
     
@@ -125,51 +81,35 @@ def build_structured_response(query, results):
     if not relevant:
         return "Low confidence match. Consider consulting a specialist."
     
-    top = relevant[0]
-    solution = top['solution']
+    # Build context from top 3 matching cases
+    context = "# Similar Construction Cases:\n\n"
+    for i, case in enumerate(relevant[:3], 1):
+        context += f"## Case {i}: {case['title']}\n"
+        context += f"**Problem:** {case['problem']}\n"
+        context += f"**Solution:** {case['solution']}\n\n"
     
-    # Clean title (remove location tags for cleaner heading)
-    title = re.sub(r'\s*\([^)]+\)\s*$', '', top['title']).strip()
-    
-    # Parse solution into components
-    root_cause = ""
-    corrective = ""
-    prevention = ""
-    
-    # Extract root cause
-    cause_match = re.search(r'[Rr]oot cause:?\s*([^.]+\.)', solution)
-    if cause_match:
-        root_cause = cause_match.group(1).strip()
-    
-    # Extract corrective action
-    corr_match = re.search(r'[Cc]orrective:?\s*([^.]+\.)', solution)
-    if corr_match:
-        corrective = corr_match.group(1).strip()
-    
-    # Extract prevention
-    prev_match = re.search(r'[Pp]revent:?\s*([^.]+\.)', solution)
-    if prev_match:
-        prevention = prev_match.group(1).strip()
-    
-    # Build natural response
-    response = f"### {title}\n\n"
-    
-    # Context paragraph
-    response += f"{top['problem']}\n\n"
-    
-    # Root cause (if found)
-    if root_cause:
-        response += f"**Root Cause:** {root_cause}\n\n"
-    
-    # What to do
-    response += "**What to do:**\n\n"
-    
-    # Get action sentences (excluding root cause/prevent parts)
-    action_text = solution
-    action_text = re.sub(r'[Rr]oot cause:?\s*[^.]+\.', '', action_text)
-    action_text = re.sub(r'[Cc]orrective:?\s*[^.]+\.', '', action_text)
-    action_text = re.sub(r'[Pp]revent:?\s*[^.]+\.', '', action_text)
-    action_text = re.sub(r'\s+', ' ', action_text).strip()
+    # Create prompt for Gemini
+    prompt = f"""You are a construction consulting expert. A user has asked: "{query}"
+
+{context}
+
+Based on these similar cases, provide a clear, actionable response with:
+1. A brief heading (without "Phase 1", "Level 3" etc.)
+2. Context paragraph explaining the issue
+3. Root cause (if identifiable)
+4. Step-by-step actions to take
+5. Prevention tips
+
+Format your response in markdown with clear sections. Be concise and practical."""
+
+    try:
+        # Call Gemini API
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        # Fallback to simple response if API fails
+        print(f"Gemini API error: {e}")
+        return build_simple_fallback(relevant[0])
     
     if corrective:
         response += f"{corrective}\n\n"
@@ -182,12 +122,18 @@ def build_structured_response(query, results):
     
     return response.strip()
 
+def build_simple_fallback(case):
+    """Simple fallback if Gemini fails"""
+    title = re.sub(r'\s*\([^)]+\)\s*$', '', case['title']).strip()
+    return f"### {title}\n\n{case['problem']}\n\n**Solution:** {case['solution']}"
+
 def fallback_chat(query, top_k=5):
-    """Main search function with structured output"""
+    """Main search function with Gemini AI"""
     results = simple_search(query, top_k)
     relevant = [r for r in results if r['score'] > 0.1]
     
-    answer = build_structured_response(query, results)
+    # Use Gemini to generate response
+    answer = build_gemini_response(query, results)
     
     return {
         "answer": answer,
