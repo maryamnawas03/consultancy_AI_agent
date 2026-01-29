@@ -117,22 +117,79 @@ def extract_prevention(solution):
     return None
 
 def build_structured_response(query, results):
-    """Build simple direct response"""
+    """Build field-ready structured response"""
     if not results:
-        return "No matching cases found. Try describing the issue differently."
+        return "❌ No matching cases found. Try describing the issue differently."
     
     relevant = [r for r in results if r['score'] > 0.1]
     if not relevant:
-        return "Low confidence match. Consider consulting a specialist."
+        return "⚠️ Low confidence match. Consider consulting a specialist."
     
     top = relevant[0]
+    confidence = "High" if top['score'] > 0.5 else "Medium" if top['score'] > 0.3 else "Low"
     
-    # Simple direct response
-    response = f"**{top['title']}**\n\n"
-    response += f"**Problem:** {top['problem']}\n\n"
-    response += f"**Solution:** {top['solution']}"
+    lines = []
     
-    return response
+    # Issue
+    lines.append(f"**Issue:** {top['title']}")
+    lines.append(f"**Confidence:** {confidence}")
+    lines.append("")
+    
+    # Likely causes
+    causes = extract_causes(relevant)
+    lines.append("**Likely causes (hypothesis)**")
+    if causes:
+        for i, cause in enumerate(causes, 1):
+            lines.append(f"{i}. {cause}")
+    else:
+        lines.append("• See evidence from cases below")
+    lines.append("")
+    
+    # Quick checks
+    lines.append("**Quick checks (10-15 min)**")
+    checks = extract_checks(top['solution'])
+    if checks:
+        for c in checks[:3]:
+            lines.append(f"• {c}")
+    else:
+        lines.append("• Visual inspection of affected area")
+        lines.append("• Verify equipment status and settings")
+        lines.append("• Check for recent changes")
+    lines.append("")
+    
+    # Fix actions
+    lines.append("**Fix actions**")
+    fixes = extract_fixes(top['solution'])
+    if fixes:
+        for f in fixes[:3]:
+            lines.append(f"• {f}")
+    else:
+        lines.append("• See solution details in evidence")
+    lines.append("")
+    
+    # Prevention
+    prevention = extract_prevention(top['solution'])
+    lines.append("**Prevent next time**")
+    if prevention:
+        lines.append(f"• {prevention}")
+    else:
+        lines.append("• Document and add to lessons learned")
+    lines.append("")
+    
+    # Escalate
+    lines.append("**⚠️ Escalate if:**")
+    lines.append("• Issue persists after checks")
+    lines.append("• Safety concern identified")
+    lines.append("• Structural or design issue suspected")
+    lines.append("")
+    
+    # Evidence
+    lines.append("**Evidence from similar cases**")
+    for r in relevant[:3]:
+        problem_short = r['problem'][:80] + "..." if len(r['problem']) > 80 else r['problem']
+        lines.append(f"• **{r['case_id']}**: {problem_short}")
+    
+    return "\n".join(lines)
 
 def fallback_chat(query, top_k=5):
     """Main search function with structured output"""
