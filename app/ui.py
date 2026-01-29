@@ -5,6 +5,7 @@ import streamlit as st
 import requests
 import time
 import os
+import markdown
 
 # Configure the page
 st.set_page_config(
@@ -172,14 +173,14 @@ for message in st.session_state.messages:
         </div>
         """, unsafe_allow_html=True)
     else:
-        # For assistant messages, render with proper formatting
-        st.markdown("""
+        # For assistant messages, convert markdown to HTML for proper styling
+        content_html = markdown.markdown(message["content"])
+        st.markdown(f"""
         <div class="chat-message assistant-message">
-            <strong>Assistant:</strong>
+            <strong>Assistant:</strong><br>
+            {content_html}
         </div>
         """, unsafe_allow_html=True)
-        # Use st.markdown to properly render markdown formatting
-        st.markdown(message["content"])
         
         # Show sources if available
         if "sources" in message and message["sources"]:
