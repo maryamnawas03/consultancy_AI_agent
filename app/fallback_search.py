@@ -127,10 +127,10 @@ def build_structured_response(query, results):
     
     top = relevant[0]
     
-    # Simple direct response
+    # Natural paragraph response
     response = f"**{top['title']}**\n\n"
-    response += f"**Problem:** {top['problem']}\n\n"
-    response += f"**Solution:** {top['solution']}"
+    response += f"{top['problem']}\n\n"
+    response += f"{top['solution']}"
     
     return response
 
