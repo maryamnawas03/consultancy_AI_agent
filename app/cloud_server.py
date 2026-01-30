@@ -117,7 +117,7 @@ def generate_response(query: str, search_results: List[Dict[str, Any]]) -> str:
     
     # Additional cases
     if len(relevant_results) > 1:
-        response_parts.append("\n**Additional Related Cases:**")
+        response_parts
         for result in relevant_results[1:3]:
             response_parts.append(f"• **{result['case_id']}**: {result['title']}")
     
@@ -126,6 +126,36 @@ def generate_response(query: str, search_results: List[Dict[str, Any]]) -> str:
     
     return "\n".join(response_parts)
 
+GEMINI_API_KEY = "AIzaSyC2Gdzl4x_Er95-znK3M3lEKzyN1WAkBy8"
+
+def gemini_response(query: str, search_results: list) -> str:
+    """Generate a response using Gemini LLM (google-generativeai SDK)"""
+    try:
+        import google.generativeai as genai
+    except ImportError:
+        return "Gemini API error: google-generativeai package not installed."
+    
+    # Configure API
+    genai.configure(api_key=GEMINI_API_KEY)
+    
+    context = ""
+    for i, case in enumerate(search_results[:3]):
+        context += f"Case {i+1}:\nTitle: {case['title']}\nProblem: {case['problem']}\nSolution: {case['solution']}\n\n"
+    
+    prompt = (
+        f"You are a construction expert. Use the following cases to answer the user's question.\n\n"
+        f"{context}"
+        f"User question: {query}\n\n"
+        f"Give a clear, practical answer for a construction site engineer."
+    )
+    
+    try:
+        model = genai.GenerativeModel('models/gemini-2.5-flash')
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception as e:
+        return f"Gemini API error: {e}"
+    
 @app.on_event("startup")
 async def startup_event():
     """Load data when the app starts"""
@@ -140,13 +170,17 @@ async def root():
 async def chat(request: ChatRequest):
     """Main chat endpoint"""
     search_results = simple_search(request.message, request.top_k)
-    answer = generate_response(request.message, search_results)
-    
+    if search_results:
+        answer = gemini_response(request.message, search_results)
+        method = "gemini"
+    else:
+        answer = generate_response(request.message, search_results)
+        method = "simple_search"
     return ChatResponse(
         answer=answer,
         sources=[r['case_id'] for r in search_results[:3] if r['score'] > 0.1],
         best_score=search_results[0]['score'] if search_results else 0.0,
-        method="simple_search"
+        method=method
     )
 
 if __name__ == "__main__":

@@ -81,6 +81,10 @@ def build_gemini_response(query, results):
     if not relevant:
         return "Low confidence match. Consider consulting a specialist."
     
+    # Import the new SDK
+    from google import genai
+    client = genai.Client(api_key=GEMINI_API_KEY)
+    
     # Build context from top 3 matching cases
     context = "# Similar Construction Cases:\n\n"
     for i, case in enumerate(relevant[:3], 1):
@@ -103,24 +107,16 @@ Based on these similar cases, provide a clear, actionable response with:
 Format your response in markdown with clear sections. Be concise and practical."""
 
     try:
-        # Call Gemini API
-        response = model.generate_content(prompt)
+        # Call Gemini API with new SDK
+        response = client.models.generate_content(
+            model='gemini-2.0-flash-exp',
+            contents=prompt
+        )
         return response.text
     except Exception as e:
         # Fallback to simple response if API fails
         print(f"Gemini API error: {e}")
         return build_simple_fallback(relevant[0])
-    
-    if corrective:
-        response += f"{corrective}\n\n"
-    if action_text:
-        response += f"{action_text}\n\n"
-    
-    # Prevention
-    if prevention:
-        response += f"**Prevention:** {prevention}\n"
-    
-    return response.strip()
 
 def build_simple_fallback(case):
     """Simple fallback if Gemini fails"""
