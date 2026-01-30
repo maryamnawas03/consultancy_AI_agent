@@ -11,8 +11,8 @@ import google.generativeai as genai
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyAEkUc4dKSmWEj67I1vMLqZWY4peUQaAks")
 genai.configure(api_key=GEMINI_API_KEY)
 
-# Initialize Gemini model (using gemini-1.5-flash for free tier availability)
-model = genai.GenerativeModel('models/gemini-1.5-flash')
+# Initialize Gemini model (using gemini-2.5-flash for free tier availability)
+model = genai.GenerativeModel('models/gemini-2.5-flash')
 
 # Trade detection keywords
 TRADE_KEYWORDS = {
