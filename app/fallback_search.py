@@ -81,10 +81,6 @@ def build_gemini_response(query, results):
     if not relevant:
         return "Low confidence match. Consider consulting a specialist."
     
-    # Import the new SDK
-    from google import genai
-    client = genai.Client(api_key=GEMINI_API_KEY)
-    
     # Build context from top 3 matching cases
     context = "# Similar Construction Cases:\n\n"
     for i, case in enumerate(relevant[:3], 1):
@@ -93,25 +89,11 @@ def build_gemini_response(query, results):
         context += f"**Solution:** {case['solution']}\n\n"
     
     # Create prompt for Gemini
-    prompt = f"""You are a construction consulting expert. A user has asked: "{query}"
-
-{context}
-
-Based on these similar cases, provide a clear, actionable response with:
-1. A brief heading (without "Phase 1", "Level 3" etc.)
-2. Context paragraph explaining the issue
-3. Root cause (if identifiable)
-4. Step-by-step actions to take
-5. Prevention tips
-
-Format your response in markdown with clear sections. Be concise and practical."""
+    prompt = f"""You are a construction consulting expert. A user has asked: \"{query}\"\n\n{context}\n\nBased on these similar cases, provide a clear, actionable response with:\n1. A brief heading (without \"Phase 1\", \"Level 3\" etc.)\n2. Context paragraph explaining the issue\n3. Root cause (if identifiable)\n4. Step-by-step actions to take\n5. Prevention tips\n\nFormat your response in markdown with clear sections. Be concise and practical."""
 
     try:
-        # Call Gemini API with new SDK
-        response = client.models.generate_content(
-            model='gemini-2.0-flash-exp',
-            contents=prompt
-        )
+        # Call Gemini API with the installed SDK
+        response = model.generate_content(prompt)
         return response.text
     except Exception as e:
         # Fallback to simple response if API fails
