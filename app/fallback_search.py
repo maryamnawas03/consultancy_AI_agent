@@ -5,7 +5,6 @@ Uses LLM to generate responses based on similar cases
 import pandas as pd
 import re
 import os
-import google.generativeai as genai
 
 # Configure Gemini API
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyAEkUc4dKSmWEj67I1vMLqZWY4peUQaAks")
