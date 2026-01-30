@@ -148,6 +148,10 @@ if "messages" not in st.session_state:
 if "session_id" not in st.session_state:
     st.session_state.session_id = f"streamlit-{int(time.time())}"
 
+# Initialize processing state tracker
+if "processing_lock" not in st.session_state:
+    st.session_state.processing_lock = False
+
 def process_user_message(prompt):
     """Process user message and get response from agent"""
     # Add user message first
@@ -188,94 +192,66 @@ for message in st.session_state.messages:
 
 # Process pending user message if it needs a response
 if (st.session_state.messages and 
-    st.session_state.messages[-1]["role"] == "user"):
-    
-    # Simple check: if last message is user and second-to-last is not assistant, we need response
-    needs_response = True
-    if len(st.session_state.messages) >= 2:
-        if st.session_state.messages[-2]["role"] == "assistant":
-            needs_response = False
-    
-    if needs_response:
-        last_user_msg = st.session_state.messages[-1]["content"]
-        with st.spinner("🔍 Searching through 50 construction cases..."):
-            # Check if API is available, otherwise use fallback
-            if API_URL and API_URL.startswith(('http://', 'https://')):
-                try:
-                    payload = {
-                        "session_id": st.session_state.session_id,
-                        "message": last_user_msg,
-                        "top_k": 6
-                    }
-                    
-                    response = requests.post(API_URL, json=payload, timeout=180)
-                    response.raise_for_status()
-                    result = response.json()
-                    
-                    answer = result["answer"]
-                    sources = result.get("sources", [])
-                    confidence = result.get("best_score", 0.0)
-                    
-                    # Add assistant response
-                    st.session_state.messages.append({
-                        "role": "assistant",
-                        "content": answer,
-                        "sources": sources,
-                        "confidence": confidence
-                    })
-                    st.rerun()
-                    
-                except (requests.exceptions.ConnectionError, requests.exceptions.HTTPError, requests.exceptions.Timeout):
-                    # Fall back to offline search on any API error
-                    if FALLBACK_AVAILABLE:
-                        try:
-                            result = fallback_chat(last_user_msg)
-                            st.session_state.messages.append({
-                                "role": "assistant",
-                                "content": result["answer"] + "\n\n*Note: Using offline search since API is unavailable.*",
-                                "sources": result.get("sources", []),
-                                "confidence": result.get("best_score", 0.0)
-                            })
-                        except Exception as e:
-                            st.session_state.messages.append({
-                                "role": "assistant", 
-                                "content": f"❌ Both API and offline search failed. Error: {str(e)}"
-                            })
-                    else:
-                        st.session_state.messages.append({
-                            "role": "assistant", 
-                            "content": "❌ API unavailable and offline mode not enabled."
-                        })
-                    st.rerun()
-                    
-                except Exception as e:
-                    st.session_state.messages.append({
-                        "role": "assistant", 
-                        "content": f"❌ Unexpected error: {str(e)}"
-                    })
-                    st.rerun()
-            else:
-                # No API configured, use fallback search directly
+    st.session_state.messages[-1]["role"] == "user" and
+    not st.session_state.processing_lock):
+    # Set lock to prevent double processing
+    st.session_state.processing_lock = True
+    last_user_msg = st.session_state.messages[-1]["content"]
+    with st.spinner("🔍 Searching through 50 construction cases..."):
+        answer = ""
+        sources = []
+        confidence = 0.0
+        if API_URL and API_URL.startswith(('http://', 'https://')):
+            try:
+                payload = {
+                    "session_id": st.session_state.session_id,
+                    "message": last_user_msg,
+                    "top_k": 6
+                }
+                response = requests.post(API_URL, json=payload, timeout=180)
+                response.raise_for_status()
+                result = response.json()
+                answer = result["answer"]
+                sources = result.get("sources", [])
+                confidence = result.get("best_score", 0.0)
+            except Exception as e:
                 if FALLBACK_AVAILABLE:
                     try:
                         result = fallback_chat(last_user_msg)
-                        st.session_state.messages.append({
-                            "role": "assistant",
-                            "content": result["answer"],
-                            "sources": result.get("sources", []),
-                            "confidence": result.get("best_score", 0.0)
-                        })
-                    except Exception as e:
-                        st.session_state.messages.append({
-                            "role": "assistant", 
-                            "content": f"❌ Offline search failed. Error: {str(e)}"
-                        })
+                        answer = result["answer"] + "\n\n*Note: Using offline search since API is unavailable.*"
+                        sources = result.get("sources", [])
+                        confidence = result.get("best_score", 0.0)
+                    except Exception as e2:
+                        answer = f"❌ Both API and offline search failed. Error: {str(e2)}"
+                        sources = []
+                        confidence = 0.0
                 else:
-                    st.session_state.messages.append({
-                        "role": "assistant", 
-                        "content": "❌ No API configured and offline search not available."
-                    })
-                st.rerun()
+                    answer = f"❌ API unavailable and offline mode not enabled. Error: {str(e)}"
+                    sources = []
+                    confidence = 0.0
+        else:
+            if FALLBACK_AVAILABLE:
+                try:
+                    result = fallback_chat(last_user_msg)
+                    answer = result["answer"]
+                    sources = result.get("sources", [])
+                    confidence = result.get("best_score", 0.0)
+                except Exception as e:
+                    answer = f"❌ Offline search failed. Error: {str(e)}"
+                    sources = []
+                    confidence = 0.0
+            else:
+                answer = "❌ No API configured and offline search not available."
+                sources = []
+                confidence = 0.0
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": answer,
+            "sources": sources,
+            "confidence": confidence
+        })
+    st.session_state.processing_lock = False
+    st.rerun()
 
 # Sample questions (only show when no conversation)
 if not st.session_state.messages:
