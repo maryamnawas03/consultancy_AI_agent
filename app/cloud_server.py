@@ -126,7 +126,7 @@ def generate_response(query: str, search_results: List[Dict[str, Any]]) -> str:
     
     return "\n".join(response_parts)
 
-GEMINI_API_KEY = "AIzaSyC2Gdzl4x_Er95-znK3M3lEKzyN1WAkBy8"
+GEMINI_API_KEY = "AIzaSyD-qDsIWaI83P3Zz_R4YNYEO2i3jhbX4uw"
 
 def gemini_response(query: str, search_results: list) -> str:
     """Generate a response using Gemini LLM (google-generativeai SDK)"""
