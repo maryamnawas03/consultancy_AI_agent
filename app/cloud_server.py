@@ -130,13 +130,24 @@ GEMINI_API_KEY = "AIzaSyBk5bmpjwCqTDPfmYGIeAaRmsUc8jDPowo"
 
 def gemini_response(query: str, search_results: list) -> str:
     """Generate a response using Gemini LLM (google-generativeai SDK)"""
+    print(f"🔍 Attempting Gemini API call with key: {GEMINI_API_KEY[:20]}...")
+    
     try:
         import google.generativeai as genai
-    except ImportError:
-        return "Gemini API error: google-generativeai package not installed."
+        print("✅ google.generativeai imported successfully")
+    except ImportError as e:
+        error_msg = f"Gemini API error: google-generativeai package not installed. {e}"
+        print(f"❌ {error_msg}")
+        return error_msg
     
     # Configure API
-    genai.configure(api_key=GEMINI_API_KEY)
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        print("✅ Gemini API configured")
+    except Exception as e:
+        error_msg = f"Gemini API error: Failed to configure API. {e}"
+        print(f"❌ {error_msg}")
+        return error_msg
     
     context = ""
     for i, case in enumerate(search_results[:3]):
@@ -150,11 +161,16 @@ def gemini_response(query: str, search_results: list) -> str:
     )
     
     try:
+        print("🤖 Creating Gemini model: models/gemini-2.5-flash")
         model = genai.GenerativeModel('models/gemini-2.5-flash')
+        print("🚀 Calling generate_content...")
         response = model.generate_content(prompt)
+        print(f"✅ Gemini response received: {len(response.text)} characters")
         return response.text.strip()
     except Exception as e:
-        return f"Gemini API error: {e}"
+        error_msg = f"Gemini API error: {e}"
+        print(f"❌ {error_msg}")
+        return error_msg
     
 @app.on_event("startup")
 async def startup_event():
