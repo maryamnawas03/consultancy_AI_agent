@@ -170,12 +170,25 @@ async def root():
 async def chat(request: ChatRequest):
     """Main chat endpoint"""
     search_results = simple_search(request.message, request.top_k)
+    
     if search_results:
-        answer = gemini_response(request.message, search_results)
-        method = "gemini"
+        # Try Gemini first
+        gemini_answer = gemini_response(request.message, search_results)
+        
+        # Check if Gemini failed (error message starts with "Gemini API error:")
+        if gemini_answer.startswith("Gemini API error:"):
+            print(f"⚠️ Gemini failed: {gemini_answer}")
+            # Fall back to simple response
+            answer = generate_response(request.message, search_results)
+            method = "simple_search_fallback"
+        else:
+            print(f"✅ Gemini response generated successfully")
+            answer = gemini_answer
+            method = "gemini"
     else:
         answer = generate_response(request.message, search_results)
         method = "simple_search"
+    
     return ChatResponse(
         answer=answer,
         sources=[r['case_id'] for r in search_results[:3] if r['score'] > 0.1],
