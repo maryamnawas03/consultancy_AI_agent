@@ -1,11 +1,12 @@
 """
-Construction assistant with Gemini AI integration
+Construction assistant with Gemini AI integration and semantic search
 Uses LLM to generate responses based on similar cases
 """
 import pandas as pd
 import re
 import os
 import google.generativeai as genai
+from semantic_search import initialize_search, get_search_engine
 
 # Configure Gemini API
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyDGJFiYL-GigoknOTovCw30NT75NVnaFAk")
@@ -34,15 +35,24 @@ def detect_trade(query):
     return 'general'
 
 def load_cases_data():
-    """Load cases CSV file"""
+    """Load cases CSV file and initialize semantic search"""
     paths = ["data/cases.csv", "../data/cases.csv"]
     for path in paths:
         if os.path.exists(path):
-            return pd.read_csv(path)
+            df = pd.read_csv(path)
+            # Initialize semantic search if not already done
+            try:
+                engine = get_search_engine()
+                if engine.embeddings is None:
+                    print("🔄 Initializing semantic search in fallback module...")
+                    initialize_search(df, model_name='all-MiniLM-L6-v2')
+            except Exception as e:
+                print(f"⚠️ Could not initialize semantic search: {e}")
+            return df
     return pd.DataFrame()
 
 def simple_search(query, top_k=5):
-    """Text-based search with scoring"""
+    """Text-based search with scoring (fallback method)"""
     df = load_cases_data()
     if df.empty:
         return []
@@ -71,6 +81,35 @@ def simple_search(query, top_k=5):
     
     scores.sort(key=lambda x: x['score'], reverse=True)
     return scores[:top_k]
+
+
+def smart_search(query, top_k=5, method="hybrid"):
+    """
+    Smart search using semantic embeddings (preferred)
+    
+    Args:
+        query: User's search query
+        top_k: Number of results
+        method: "semantic", "keyword", or "hybrid"
+    """
+    try:
+        engine = get_search_engine()
+        
+        # Make sure engine is initialized
+        if engine.embeddings is None:
+            df = load_cases_data()
+            if not df.empty:
+                initialize_search(df, model_name='all-MiniLM-L6-v2')
+        
+        if method == "semantic":
+            return engine.semantic_search(query, top_k)
+        elif method == "keyword":
+            return engine.keyword_search(query, top_k)
+        else:  # hybrid
+            return engine.hybrid_search(query, top_k)
+    except Exception as e:
+        print(f"⚠️ Semantic search failed, using simple search: {e}")
+        return simple_search(query, top_k)
 
 def build_gemini_response(query, results):
     """Use Gemini AI to generate response based on similar cases"""
@@ -105,9 +144,10 @@ def build_simple_fallback(case):
     title = re.sub(r'\s*\([^)]+\)\s*$', '', case['title']).strip()
     return f"### {title}\n\n{case['problem']}\n\n**Solution:** {case['solution']}"
 
-def fallback_chat(query, top_k=5):
-    """Main search function with Gemini AI"""
-    results = simple_search(query, top_k)
+def fallback_chat(query, top_k=5, method="hybrid"):
+    """Main search function with Gemini AI and semantic search"""
+    # Use smart search (semantic/hybrid) for better results
+    results = smart_search(query, top_k, method)
     relevant = [r for r in results if r['score'] > 0.1]
     
     # Use Gemini to generate response
@@ -117,5 +157,6 @@ def fallback_chat(query, top_k=5):
         "answer": answer,
         "sources": [r['case_id'] for r in relevant[:3]],
         "best_score": results[0]['score'] if results else 0.0,
-        "trade": detect_trade(query)
+        "trade": detect_trade(query),
+        "search_method": method
     }

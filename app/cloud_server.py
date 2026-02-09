@@ -6,9 +6,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
 import requests
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import pandas as pd
 import re
+from semantic_search import initialize_search, get_search_engine
 
 app = FastAPI(title="Construction Consulting API", version="1.0.0")
 
@@ -25,28 +26,48 @@ class ChatRequest(BaseModel):
     session_id: str
     message: str
     top_k: int = 6
+    search_method: str = "hybrid"  # Options: "semantic", "keyword", "hybrid"
 
 class ChatResponse(BaseModel):
     answer: str
     sources: List[str]
     best_score: float
     method: str
+    search_method: Optional[str] = None
 
 # Load cases data at startup
 cases_df = None
+search_engine = None
 
 def load_cases():
-    """Load the cases CSV file"""
-    global cases_df
+    """Load the cases CSV file and initialize semantic search"""
+    global cases_df, search_engine
     try:
-        cases_df = pd.read_csv("data/cases.csv")
-        print(f"✅ Loaded {len(cases_df)} cases")
+        # Try both relative and absolute paths
+        paths = ["data/cases.csv", "../data/cases.csv"]
+        cases_path = None
+        for path in paths:
+            if os.path.exists(path):
+                cases_path = path
+                break
+        
+        if cases_path is None:
+            raise FileNotFoundError("cases.csv not found in data/ or ../data/")
+        
+        cases_df = pd.read_csv(cases_path)
+        print(f"✅ Loaded {len(cases_df)} cases from {cases_path}")
+        
+        # Initialize semantic search engine
+        print("🔄 Initializing semantic search engine...")
+        search_engine = initialize_search(cases_df, model_name='all-MiniLM-L6-v2')
+        print("✅ Semantic search engine ready")
     except Exception as e:
-        print(f"❌ Error loading cases: {e}")
+        print(f"❌ Error loading cases or initializing search: {e}")
         cases_df = pd.DataFrame()
+        search_engine = None
 
 def simple_search(query: str, top_k: int = 6) -> List[Dict[str, Any]]:
-    """Simple text-based search using keyword matching"""
+    """Simple text-based search using keyword matching (legacy fallback)"""
     if cases_df is None or cases_df.empty:
         return []
     
@@ -94,6 +115,38 @@ def simple_search(query: str, top_k: int = 6) -> List[Dict[str, Any]]:
     
     scores.sort(key=lambda x: x['score'], reverse=True)
     return scores[:top_k]
+
+
+def smart_search(query: str, top_k: int = 6, method: str = "hybrid") -> List[Dict[str, Any]]:
+    """
+    Smart search using semantic embeddings (preferred method)
+    
+    Args:
+        query: User's search query
+        top_k: Number of results to return
+        method: Search method - "semantic", "keyword", or "hybrid"
+        
+    Returns:
+        List of search results with scores
+    """
+    if search_engine is None:
+        print("⚠️ Semantic search not available, falling back to simple search")
+        return simple_search(query, top_k)
+    
+    try:
+        if method == "semantic":
+            results = search_engine.semantic_search(query, top_k)
+        elif method == "keyword":
+            results = search_engine.keyword_search(query, top_k)
+        else:  # hybrid (default)
+            results = search_engine.hybrid_search(query, top_k)
+        
+        print(f"🔍 {method.capitalize()} search returned {len(results)} results")
+        return results
+    except Exception as e:
+        print(f"❌ Error in smart_search: {e}")
+        # Fallback to simple search
+        return simple_search(query, top_k)
 
 def generate_response(query: str, search_results: List[Dict[str, Any]]) -> str:
     """Generate response based on search results"""
@@ -184,8 +237,9 @@ async def root():
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    """Main chat endpoint"""
-    search_results = simple_search(request.message, request.top_k)
+    """Main chat endpoint with semantic search"""
+    # Use smart search (semantic/hybrid) instead of simple search
+    search_results = smart_search(request.message, request.top_k, request.search_method)
     
     if search_results:
         # Try Gemini first
@@ -196,20 +250,21 @@ async def chat(request: ChatRequest):
             print(f"⚠️ Gemini failed: {gemini_answer}")
             # Fall back to simple response
             answer = generate_response(request.message, search_results)
-            method = "simple_search_fallback"
+            method = f"{request.search_method}_search_fallback"
         else:
             print(f"✅ Gemini response generated successfully")
             answer = gemini_answer
             method = "gemini"
     else:
         answer = generate_response(request.message, search_results)
-        method = "simple_search"
+        method = f"{request.search_method}_search"
     
     return ChatResponse(
         answer=answer,
         sources=[r['case_id'] for r in search_results[:3] if r['score'] > 0.1],
         best_score=search_results[0]['score'] if search_results else 0.0,
-        method=method
+        method=method,
+        search_method=request.search_method
     )
 
 if __name__ == "__main__":
