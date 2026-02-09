@@ -8,7 +8,7 @@ import os
 import google.generativeai as genai
 
 # Configure Gemini API
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyAPSaF71oVoN1JOWDY1QN_ZDuhBBWMAbAw")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyDGJFiYL-GigoknOTovCw30NT75NVnaFAk")
 genai.configure(api_key=GEMINI_API_KEY)
 
 # Initialize Gemini model (using gemini-2.5-flash for free tier availability)
