@@ -8,7 +8,7 @@ import os
 import google.generativeai as genai
 
 # Configure Gemini API
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "AIzaSyBOL1MerZ-WZrukiFxhMGRe4UNBcGxdC6I"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyDGJFiYL-GigoknOTovCw30NT75NVnaFAk")
 genai.configure(api_key=GEMINI_API_KEY)
 
 # Initialize Gemini model (using gemini-2.5-flash for free tier availability)
@@ -32,17 +32,17 @@ def detect_trade(query):
         if any(kw in query_lower for kw in keywords):
             return trade
     return 'general'
+
 def load_cases_data():
     """Load cases CSV file"""
     paths = ["data/cases.csv", "../data/cases.csv"]
     for path in paths:
         if os.path.exists(path):
-            df = pd.read_csv(path)
-            return df
+            return pd.read_csv(path)
     return pd.DataFrame()
 
 def simple_search(query, top_k=5):
-    """Text-based search with scoring (fallback method)"""
+    """Text-based search with scoring"""
     df = load_cases_data()
     if df.empty:
         return []
@@ -71,17 +71,6 @@ def simple_search(query, top_k=5):
     
     scores.sort(key=lambda x: x['score'], reverse=True)
     return scores[:top_k]
-
-def smart_search(query, top_k=5, method="keyword"):
-    """
-    Search using keyword matching only (no semantic search)
-    
-    Args:
-        query: User's search query
-        top_k: Number of results
-        method: Ignored (always uses keyword search)
-    """
-    return simple_search(query, top_k)
 
 def build_gemini_response(query, results):
     """Use Gemini AI to generate response based on similar cases"""
@@ -116,10 +105,9 @@ def build_simple_fallback(case):
     title = re.sub(r'\s*\([^)]+\)\s*$', '', case['title']).strip()
     return f"### {title}\n\n{case['problem']}\n\n**Solution:** {case['solution']}"
 
-def fallback_chat(query, top_k=5, method="hybrid"):
-    """Main search function with Gemini AI and semantic search"""
-    # Use smart search (semantic/hybrid) for better results
-    results = smart_search(query, top_k, method)
+def fallback_chat(query, top_k=5):
+    """Main search function with Gemini AI"""
+    results = simple_search(query, top_k)
     relevant = [r for r in results if r['score'] > 0.1]
     
     # Use Gemini to generate response
@@ -129,6 +117,5 @@ def fallback_chat(query, top_k=5, method="hybrid"):
         "answer": answer,
         "sources": [r['case_id'] for r in relevant[:3]],
         "best_score": results[0]['score'] if results else 0.0,
-        "trade": detect_trade(query),
-        "search_method": method
+        "trade": detect_trade(query)
     }

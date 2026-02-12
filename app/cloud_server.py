@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
 import requests
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import pandas as pd
 import re
 
@@ -39,26 +39,14 @@ def load_cases():
     """Load the cases CSV file"""
     global cases_df
     try:
-        # Try both relative and absolute paths
-        paths = ["data/cases.csv", "../data/cases.csv"]
-        cases_path = None
-        for path in paths:
-            if os.path.exists(path):
-                cases_path = path
-                break
-        
-        if cases_path is None:
-            raise FileNotFoundError("cases.csv not found in data/ or ../data/")
-        
-        cases_df = pd.read_csv(cases_path)
-        print(f"✅ Loaded {len(cases_df)} cases from {cases_path}")
-        
+        cases_df = pd.read_csv("data/cases.csv")
+        print(f"✅ Loaded {len(cases_df)} cases")
     except Exception as e:
         print(f"❌ Error loading cases: {e}")
         cases_df = pd.DataFrame()
 
 def simple_search(query: str, top_k: int = 6) -> List[Dict[str, Any]]:
-    """Simple text-based search using keyword matching (legacy fallback)"""
+    """Simple text-based search using keyword matching"""
     if cases_df is None or cases_df.empty:
         return []
     
@@ -107,21 +95,6 @@ def simple_search(query: str, top_k: int = 6) -> List[Dict[str, Any]]:
     scores.sort(key=lambda x: x['score'], reverse=True)
     return scores[:top_k]
 
-
-def smart_search(query: str, top_k: int = 6, method: str = "keyword") -> List[Dict[str, Any]]:
-    """
-    Search using keyword matching (simple text-based search)
-    
-    Args:
-        query: User's search query
-        top_k: Number of results to return
-        method: Search method (ignored - always uses keyword search)
-        
-    Returns:
-        List of search results with scores
-    """
-    return simple_search(query, top_k)
-
 def generate_response(query: str, search_results: List[Dict[str, Any]]) -> str:
     """Generate response based on search results"""
     if not search_results:
@@ -153,8 +126,7 @@ def generate_response(query: str, search_results: List[Dict[str, Any]]) -> str:
     
     return "\n".join(response_parts)
 
-# Get API key from environment or use default
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "AIzaSyBOL1MerZ-WZrukiFxhMGRe4UNBcGxdC6I"
+GEMINI_API_KEY = "AIzaSyDGJFiYL-GigoknOTovCw30NT75NVnaFAk"
 
 def gemini_response(query: str, search_results: list) -> str:
     """Generate a response using Gemini LLM (google-generativeai SDK)"""
@@ -212,9 +184,8 @@ async def root():
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    """Main chat endpoint with keyword search"""
-    # Use keyword search
-    search_results = smart_search(request.message, request.top_k)
+    """Main chat endpoint"""
+    search_results = simple_search(request.message, request.top_k)
     
     if search_results:
         # Try Gemini first
@@ -225,14 +196,14 @@ async def chat(request: ChatRequest):
             print(f"⚠️ Gemini failed: {gemini_answer}")
             # Fall back to simple response
             answer = generate_response(request.message, search_results)
-            method = "keyword_search_fallback"
+            method = "simple_search_fallback"
         else:
             print(f"✅ Gemini response generated successfully")
             answer = gemini_answer
             method = "gemini"
     else:
         answer = generate_response(request.message, search_results)
-        method = "keyword_search"
+        method = "simple_search"
     
     return ChatResponse(
         answer=answer,
