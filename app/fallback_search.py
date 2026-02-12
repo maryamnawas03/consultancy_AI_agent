@@ -1,15 +1,14 @@
 """
-Construction assistant with Gemini AI integration and semantic search
+Construction assistant with Gemini AI integration
 Uses LLM to generate responses based on similar cases
 """
 import pandas as pd
 import re
 import os
 import google.generativeai as genai
-from semantic_search import initialize_search, get_search_engine
 
 # Configure Gemini API
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyBOL1MerZ-WZrukiFxhMGRe4UNBcGxdC6I")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "AIzaSyBOL1MerZ-WZrukiFxhMGRe4UNBcGxdC6I"
 genai.configure(api_key=GEMINI_API_KEY)
 
 # Initialize Gemini model (using gemini-2.5-flash for free tier availability)
@@ -33,21 +32,12 @@ def detect_trade(query):
         if any(kw in query_lower for kw in keywords):
             return trade
     return 'general'
-
 def load_cases_data():
-    """Load cases CSV file and initialize semantic search"""
+    """Load cases CSV file"""
     paths = ["data/cases.csv", "../data/cases.csv"]
     for path in paths:
         if os.path.exists(path):
             df = pd.read_csv(path)
-            # Initialize semantic search if not already done
-            try:
-                engine = get_search_engine()
-                if engine.embeddings is None:
-                    print("🔄 Initializing semantic search in fallback module...")
-                    initialize_search(df, model_name='all-MiniLM-L6-v2')
-            except Exception as e:
-                print(f"⚠️ Could not initialize semantic search: {e}")
             return df
     return pd.DataFrame()
 
@@ -82,34 +72,16 @@ def simple_search(query, top_k=5):
     scores.sort(key=lambda x: x['score'], reverse=True)
     return scores[:top_k]
 
-
-def smart_search(query, top_k=5, method="hybrid"):
+def smart_search(query, top_k=5, method="keyword"):
     """
-    Smart search using semantic embeddings (preferred)
+    Search using keyword matching only (no semantic search)
     
     Args:
         query: User's search query
         top_k: Number of results
-        method: "semantic", "keyword", or "hybrid"
+        method: Ignored (always uses keyword search)
     """
-    try:
-        engine = get_search_engine()
-        
-        # Make sure engine is initialized
-        if engine.embeddings is None:
-            df = load_cases_data()
-            if not df.empty:
-                initialize_search(df, model_name='all-MiniLM-L6-v2')
-        
-        if method == "semantic":
-            return engine.semantic_search(query, top_k)
-        elif method == "keyword":
-            return engine.keyword_search(query, top_k)
-        else:  # hybrid
-            return engine.hybrid_search(query, top_k)
-    except Exception as e:
-        print(f"⚠️ Semantic search failed, using simple search: {e}")
-        return simple_search(query, top_k)
+    return simple_search(query, top_k)
 
 def build_gemini_response(query, results):
     """Use Gemini AI to generate response based on similar cases"""
