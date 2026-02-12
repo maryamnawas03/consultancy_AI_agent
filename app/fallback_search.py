@@ -9,7 +9,7 @@ import google.generativeai as genai
 from semantic_search import initialize_search, get_search_engine
 
 # Configure Gemini API
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyDGJFiYL-GigoknOTovCw30NT75NVnaFAk")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyBOL1MerZ-WZrukiFxhMGRe4UNBcGxdC6I")
 genai.configure(api_key=GEMINI_API_KEY)
 
 # Initialize Gemini model (using gemini-2.5-flash for free tier availability)
